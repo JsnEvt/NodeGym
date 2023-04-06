@@ -1,8 +1,8 @@
 import { FastifyRequest, FastifyReply } from 'fastify'
-import { hash } from 'bcryptjs'
-import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
-import { createUseCase } from '@/use-cases/create-use-case'
+import { CreateUseCase } from '@/use-cases/create-use-case'
+import { PrismaUsersRepository } from '@/repositories/prismaUsersRepositories'
+import { UserAlreadyExistsError } from '@/use-cases/errors/user-already-exists'
 
 export async function create(request: FastifyRequest, reply: FastifyReply) {
   const registerBodySchema = z.object({
@@ -13,12 +13,19 @@ export async function create(request: FastifyRequest, reply: FastifyReply) {
   const { name, email, password } = registerBodySchema.parse(request.body)
 
   try {
-    await createUseCase({
+    const prismaUsersRepository = new PrismaUsersRepository()
+    const createUseCase = new CreateUseCase(prismaUsersRepository)
+
+    await createUseCase.execute({
       name, email, password
     })
   } catch (err) {
-    return reply.status(409).send()
+    if (err instanceof UserAlreadyExistsError) {
+      return reply.status(409).send({ message: err.message })
+    }
+    //camada de erro para tratar quando não houver relacionamentos com os outros já digitados.
+    //a linha abaixo cai numa tratativa para o fastify.
+    throw err
   }
-
   return reply.status(201).send()
 }
